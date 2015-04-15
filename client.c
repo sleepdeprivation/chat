@@ -1,7 +1,7 @@
 /*
 	Initial client code gotten from:
 		http://www.linuxhowtos.org/data/6/client.c
-	subsequently annotated by cburke
+	subsequently annotated and edited heavily by cburke
 
 */
 #include <stdio.h>
@@ -11,13 +11,54 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netdb.h> 
+#include <netdb.h>
+#include <sys/poll.h>
+#include <pthread.h>
+
+pthread_t reader;	//global reader
+
+int BUFFER_SIZE = 1024;
 
 //when the syscall fails
 void error(const char *msg)
 {
 	perror(msg);
 	exit(0);
+}
+
+
+/*
+	Read what the server is sending us (from the other clients)
+*/
+void* readFromServer(void* socket){
+
+	int newsockfd = *((int *) socket);	//our fd to the server
+
+	struct pollfd pfd;			//we're gonna keep polling
+	int n = -1;
+
+	char buffer[BUFFER_SIZE];	//we'll be reading from the connection to here
+
+	while(1){
+
+		pfd.fd = newsockfd;
+		pfd.events = POLLIN;
+
+		poll(&pfd, 1, -1);
+
+		bzero(buffer,BUFFER_SIZE);				//zero out the buffer
+
+		if(pfd.revents & POLLIN){
+			n = read(pfd.fd, buffer, BUFFER_SIZE);
+			if(n <= 0){
+				break;
+			}else{
+				buffer[BUFFER_SIZE-1] = '\0';
+				printf("SERVER:%s",buffer);	//k
+			}
+		}
+	}
+
 }
 
 int main(int argc, char *argv[])
@@ -32,7 +73,7 @@ int main(int argc, char *argv[])
 	struct hostent *server;
 
 	//our buffer
-	char buffer[256];
+	char buffer[BUFFER_SIZE];
 
 	//need all the args
 	if (argc < 3) {
@@ -69,15 +110,29 @@ int main(int argc, char *argv[])
 	//cue dialup sound
 	if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) 
 	   error("ERROR connecting... Something bad happened");
+
+printf(">");
+fgets(buffer,BUFFER_SIZE-1,stdin);
+
+double period;
+
+printf("repeater: ");
+scanf("%lf",&period);
+printf("%lf\n", period);
+
+	pthread_create(&reader, NULL, &readFromServer, (void *) &sockfd);
 	while(1){
+
+		sleep(period);
+
 		//prompt user to send a message
-		printf(">");
+		//printf(">");
 
 		//kill buffer
-		bzero(buffer,256);
+		//bzero(buffer,BUFFER_SIZE);
 
 		//eat up stdin into buffer
-		fgets(buffer,255,stdin);
+		//fgets(buffer,BUFFER_SIZE-1,stdin);
 
 		//write to socket
 		n = write(sockfd,buffer,strlen(buffer));
@@ -86,17 +141,7 @@ int main(int argc, char *argv[])
 			error("ERROR writing to socket");
 	}
 	//kill the buffer
-	bzero(buffer,256);
-
-/*
-	//read from socket
-	n = read(sockfd,buffer,255);
-	if (n < 0) 
-		error("ERROR reading from socket");
-
-	//what'd the server think about that?
-	printf("%s\n",buffer);
-*/
+	bzero(buffer,BUFFER_SIZE);
 
 	//always remember to close your files
 	close(sockfd);

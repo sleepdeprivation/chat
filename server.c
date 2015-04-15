@@ -2,7 +2,7 @@
    The port number is passed as an argument
 	Initially from
 		http://www.linuxhowtos.org/data/6/server.c
-	subsequently annotated by cburke
+	subsequently annotated and edited heavily by cburke
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +12,16 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/poll.h>
+#include <pthread.h>
 
+
+pthread_t tid[2];	//global thread holder
+
+int sid[2];
+
+pthread_t writer;	//global writer
+
+int BUFFER_SIZE = 1024;
 
 //called when a syscall fails
 void error(const char *msg)
@@ -21,12 +30,60 @@ void error(const char *msg)
 	exit(1);
 }
 
+
+void* outputAll(void* buf){
+	char * buffer = (char *) buf;
+	int ii;
+	for(ii = 0; ii < 2; ii++){
+		printf("\nwriting to socket id %d\n", sid[ii]);
+		write(sid[ii],buffer,strlen(buffer));
+	}
+
+}
+
+
+void* handleInput(void* socket){
+
+	int newsockfd = *((int *) socket);
+	int n;
+
+
+	printf("\nthread created with socket id %d\n", newsockfd);
+
+	struct pollfd pfd;
+
+	char buffer[BUFFER_SIZE];	//we'll be reading from the connection to here
+
+	while(1){
+		printf("polling\n");
+
+		pfd.fd = newsockfd;
+		pfd.events = POLLIN;
+
+		poll(&pfd, 1, -1);
+
+		bzero(buffer,BUFFER_SIZE);				//zero out the buffer
+
+		if(pfd.revents & POLLIN){
+			n = read(pfd.fd, buffer, 1024);
+			if(n <= 0){
+				break;
+			}else{
+				buffer[BUFFER_SIZE-1] = '\0';
+				pthread_create(&writer, NULL, &outputAll, (void *) &buffer);
+				printf(">%s",buffer);	//k
+			}
+		}
+	}
+	close(newsockfd);
+}
+
 int main(int argc, char *argv[])
 {
 	//file descriptors and a port number
 	int sockfd, newsockfd, portno;
 	socklen_t clilen;
-	char buffer[256];	//we'll be reading from the connection to here
+	char buffer[BUFFER_SIZE];	//we'll be reading from the connection to here
 
 	struct sockaddr_in serv_addr, cli_addr;		//structs containing network connection info
 
@@ -60,68 +117,24 @@ int main(int argc, char *argv[])
 
 	clilen = sizeof(cli_addr);
 
-	//instructs the socket to wait until a connection is established
-	newsockfd = accept(sockfd, 
-			  (struct sockaddr *) &cli_addr, 
-			  &clilen);
-
 	//fail
 	if (newsockfd < 0) 
 		error("ERROR on accept");
 
-	char command[5];
-
-	struct pollfd pfd;
+	int ii = 0;
 
 	while(1){
 
+		//instructs the socket to wait until a connection is established
+		newsockfd = accept(sockfd, 
+				  (struct sockaddr *) &cli_addr, 
+				  &clilen);
 
-		pfd.fd = newsockfd;
-		pfd.events = POLLIN;		
-
-		poll(&pfd, 1, -1);
-
-		bzero(buffer,256);				//zero out the buffer
-		bzero(command, 4);				//zero out the command buffer
-
-		if(pfd.revents & POLLIN){
-			n = read(pfd.fd, buffer, 1024);
-			if(n <= 0){
-				//instructs the socket to wait until a connection is established
-				newsockfd = accept(sockfd, 
-						  (struct sockaddr *) &cli_addr, 
-						  &clilen);
-
-			}else{
-				printf(">%s\n",buffer);	//k
-			}
+		if(ii < 2){
+			sid[ii] = newsockfd;
+			pthread_create(&tid[ii], NULL, &handleInput, (void *) &newsockfd);
+			ii++;
 		}
-
-		/*
-		n = read(newsockfd,command,4);			//eat a command size chunk
-
-		printf("read\n");
-
-		if (n < 0) error("ERROR reading from socket");	//err
-
-		printf("no error\n");
-
-		command[4] = '\0';				//null terminate the command string
-
-		if( strcmp(command, "quit") == 0){
-
-			printf("quitting...\n");	
-			break;
-		}else if( strcmp(command, "/say") == 0){
-			printf("saying...\n");
-			n = read(newsockfd, buffer, 256);
-		}
-
-
-		n = write(newsockfd,"I got your message",18);	//write back
-
-		if (n < 0) error("ERROR writing to socket");	//nope
-*/
 
 	}
 
