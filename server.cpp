@@ -7,19 +7,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 #include <unistd.h>
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/poll.h>
-#include <pthread.h>
+#include <stack>
+#include <vector>
+#include <thread>
+#include <set>
+#include <queue>
+#include <mutex>
+#include "User.h"
+#include "Chat.h"
+
+using namespace std;
 
 
-pthread_t tid[2];	//global thread holder
 
-int sid[2];
 
-pthread_t writer;	//global writer
+//vector<thread> tIDs;	//global thread holder
 
 int BUFFER_SIZE = 1024;
 
@@ -31,51 +39,11 @@ void error(const char *msg)
 }
 
 
-void* outputAll(void* buf){
-	char * buffer = (char *) buf;
-	int ii;
-	for(ii = 0; ii < 2; ii++){
-		printf("\nwriting to socket id %d\n", sid[ii]);
-		write(sid[ii],buffer,strlen(buffer));
-	}
 
-}
+void handleInput(int socket){
 
+	int newsockfd = socket;
 
-void* handleInput(void* socket){
-
-	int newsockfd = *((int *) socket);
-	int n;
-
-
-	printf("\nthread created with socket id %d\n", newsockfd);
-
-	struct pollfd pfd;
-
-	char buffer[BUFFER_SIZE];	//we'll be reading from the connection to here
-
-	while(1){
-		printf("polling\n");
-
-		pfd.fd = newsockfd;
-		pfd.events = POLLIN;
-
-		poll(&pfd, 1, -1);
-
-		bzero(buffer,BUFFER_SIZE);				//zero out the buffer
-
-		if(pfd.revents & POLLIN){
-			n = read(pfd.fd, buffer, 1024);
-			if(n <= 0){
-				break;
-			}else{
-				buffer[BUFFER_SIZE-1] = '\0';
-				pthread_create(&writer, NULL, &outputAll, (void *) &buffer);
-				printf(">%s",buffer);	//k
-			}
-		}
-	}
-	close(newsockfd);
 }
 
 int main(int argc, char *argv[])
@@ -123,18 +91,20 @@ int main(int argc, char *argv[])
 
 	int ii = 0;
 
+	ChatManager m;
+
 	while(1){
 
 		//instructs the socket to wait until a connection is established
 		newsockfd = accept(sockfd, 
 				  (struct sockaddr *) &cli_addr, 
 				  &clilen);
-
-		if(ii < 2){
-			sid[ii] = newsockfd;
-			pthread_create(&tid[ii], NULL, &handleInput, (void *) &newsockfd);
-			ii++;
-		}
+		//User tempUser = User("username", newsockfd);
+		m.newUser("username" + char(ii), newsockfd);
+		//thread inputHandler(handleInput, newsockfd);
+		//inputHandler.detach();
+		//sIDs.insert(newsockfd);
+		ii++;
 
 	}
 

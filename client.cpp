@@ -14,6 +14,9 @@
 #include <netdb.h>
 #include <sys/poll.h>
 #include <pthread.h>
+#include <iostream>
+
+using namespace std;
 
 pthread_t reader;	//global reader
 
@@ -116,9 +119,9 @@ fgets(buffer,BUFFER_SIZE-1,stdin);
 
 double period;
 
-printf("repeater: ");
-scanf("%lf",&period);
-printf("%lf\n", period);
+cout << "repeater: ";
+cin >> period;
+cout << period << endl;
 
 	pthread_create(&reader, NULL, &readFromServer, (void *) &sockfd);
 	while(1){
